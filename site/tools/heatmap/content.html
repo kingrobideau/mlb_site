@@ -1,0 +1,136 @@
+    <!DOCTYPE html>
+<html lang="en">
+    <head>
+        <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
+    </head>
+    <body>
+
+        <h1><center><font face="arial" color="purple" size="20">Saber Create</font></center></h1>
+        <script type="text/javascript">
+
+            //api call
+            prado = 445988;
+            update(prado);
+
+            function visualize(data, type) {
+               
+                //parameters
+                //____________________________________________________________
+                var bTol = 1; //ball tolerance (ft)
+                var ftToPx = 100/1 //ratio of px to ft to be used on x and y scales
+                var origin = [0, 0] //origin of plot
+                //____________________________________________________________
+
+                //constants
+                //____________________________________________________________
+                var pw = 17/12; //width of home plate (ft)
+                var szL = 0 - pw/2; //left of strike zone (ft); horizontal middle of home plate = 0
+                var szT = mean(data, "sz_top"); //top of strike zone (ft); sz_top is entered by a technician
+                var szR = 0 + pw/2; //right of strike zone; horizontal middle of home plate = 0
+                var szB = mean(data, "sz_bot"); //bottom of strike zone (ft); sz_bot is entered by a technican
+                //____________________________________________________________
+
+                zoneMap = d3.select("body")
+                    .append("svg");
+`
+                var xScale = d3.scale.linear()
+                    .domain([szL-bTol, szR+bTol])
+                    .range([origin[0], ((szR+bTol) - (szL-bTol))*ftToPx]);
+                var yScale = d3.scale.linear()
+                    .domain([szB-bTol, szT+bTol])
+                    .range([origin[1], ((szT+bTol) - (szB-bTol))*ftToPx]);
+
+                var scL = xScale(szL);
+                var scT = yScale(szT);
+                var scR = xScale(szR);
+                var scB = yScale(szB);
+                var left = xScale(szL - bTol);
+                var top = yScale(szT + bTol);
+                var right = xScale(szR + bTol);
+                var bottom = yScale(szB - bTol);
+
+                //draw plot area (strikes, and balls <= bTol outside the strike zone)   
+                zoneMap.append("rect")
+                    .attr("x", xScale.range[0])
+                    .attr("y", yScale.range[0])
+                    .attr("width", scL + scR) //should clean up...assumes scL = scR       
+                    .attr("height", scT + scB) //should clean up...assumes scT = scB
+                    .attr("fill", "black");
+
+                //select visualization
+                heatmap(15,15);
+                //scatter();
+
+                function heatmap(xTiles, yTiles) {
+                    heatColor = d3.scale.linear()
+                        .domain([0, 1, 2, 3, 4, 5]) //really should be based on percents, but frequency is fine for now
+                        .range(["gray", "blue", "green", "yellow", "orange", "red"]);
+                    //create xTile x yTile pitch frequency matrix, with all values initialized at 0
+                    fMat = [];
+                    for(r=0; r<yTiles; r++) {
+                        row = new Array(yTiles);
+                        for(c=0; c<xTiles; c++) {
+                            row[c] = 0;
+                        }
+                        fMat[r] = row;
+                    }   
+                    //calculate frequencies
+                    for (var pitch in data) {
+                        if (data[pitch].px != null && data[pitch].px >= (szL - bTol) 
+                                && data[pitch].px <= (szR + bTol) && data[pitch].pz != null  
+                                && data[pitch].pz >= (szB - bTol) && data[pitch].pz <= (szT + bTol)) {
+                            fMat[Math.floor(xScale(data[pitch].px)/((right - left)/xTiles))]
+                                    [Math.floor(yScale(data[pitch].pz)/((top - bottom)/yTiles))] += 1;  
+                        }
+                    }   
+                    //draw each rectangle in the matrix
+                    for (x=0; x<xTiles; x++) {
+                        for (y=0; y<yTiles; y++) {
+                            zoneMap.append("rect")
+                                .attr("x", scL + x * (scR - scL)/xTiles)
+                                .attr("y", scB + y * (scT - scB)/yTiles)
+                                .attr("width", (right - left)/xTiles)
+                                .attr("height", (top - bottom)/yTiles)
+                                .attr("fill", heatColor(fMat[x][y]));
+                        }
+                    }
+                }
+
+                //scatter plot
+                function scatter() {
+                    zoneMap.selectAll("circle")
+                        .data(data)
+                        .enter()
+                        .append("circle")
+                            .attr("cx", function(d) {
+                                return xScale(d.px);
+                            })
+                            .attr("cy", function(d) {
+                                return yScale(d.pz);
+                            })
+                            .attr("fill", "pink ")
+                            .attr("r", 2);
+                }
+
+            }
+
+            //request new player from api
+            function update(playerId) {
+                url =  "http://127.0.0.1:8000/api/pitch/" + playerId + "/.json";
+                d3.json(url, function(error, data) {
+                    if(error) console.log(error);
+                    console.log(data);
+                    visualize(data);
+                })
+            }
+
+            //helper functions
+            function mean(data, value) {
+                return d3.mean(data, function(d) {
+                    return d[value];
+                })
+            }
+
+        </script>
+    </body>
+</html>
